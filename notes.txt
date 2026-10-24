@@ -1,0 +1,21 @@
+# sidebar layout
+
+| **YOUR LIBRARY** |
+|  ❤️ Liked        |
+|  📂 Playlists    |
+|  🎤 Artists      |
+|  💿️ Albums       |
+|                  |
+| **OFFLINE**      |
+|  📥 Downloads    |
+|  📂 Import       |
+|                  |
+| **CUSTOM**       |
+|  🔌 Plugins      |
+|  🎨 Themes       |
+|                  |
+| **SYSTEM**       |
+|  ⚙️ Settings     |
+|                  |
+| 💾 200.5 MB      |
++------------------+
