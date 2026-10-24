@@ -6,6 +6,8 @@
     {
         "background_color": "#0F0F0F",
         "sidebar_color": "#131313",
+        "hover_color": "#333333",
+        "pressed_color": "#444444",
         "font": "Segoe UI"
     }
 }
