@@ -45,7 +45,7 @@ def slider_change(value):
   global volume
   volume = value
 app = Root(title="Music App", bgcolor=theme['background_color'])
-sidebar = Widget(parent=app, bgcolor=theme['sidebar_color'], width=Dim(0, 250), height=Dim(0.9))
+sidebar = Widget(parent=app, bgcolor=theme['sidebar_color'], width=Dim(0, 250), height=Dim(1, -100))
 search_image = ImageLabel(parent=app, image="./icons/search.png", width=Dim(0, 30), height=Dim(0.05), x=Dim(0, 290), y=Dim(0.02))
 search_bar = TextInput(parent=app, width=Dim(1, -600), height=Dim(0.05), x=Dim(0, 350), y=Dim(0.02), placeholder="Search...", bgcolor=theme['background_color'], focused_bgcolor=theme['background_color'], font_name=theme['font'], font_size=20)
 playing_widget = Widget(parent=app, bgcolor=theme['sidebar_color'], width=Dim(1), height=Dim(0, 100), y=Dim(1, -100))
