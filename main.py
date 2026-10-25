@@ -44,17 +44,17 @@ volume = 50
 def slider_change(value):
   global volume
   volume = value
-app = Root(title="Music App", bgcolor=theme['background_color'])
+app = Root(title="Music App", bgcolor=theme['app_background_color'])
 sidebar = Widget(parent=app, bgcolor=theme['sidebar_color'], width=Dim(0, 250), height=Dim(1, -100))
 search_image = ImageLabel(parent=app, image="./icons/search.png", width=Dim(0, 30), height=Dim(0.05), x=Dim(0, 290), y=Dim(0.02))
-search_bar = TextInput(parent=app, width=Dim(1, -600), height=Dim(0.05), x=Dim(0, 350), y=Dim(0.02), placeholder="Search...", bgcolor=theme['background_color'], focused_bgcolor=theme['background_color'], font_name=theme['font'], font_size=20)
-playing_widget = Widget(parent=app, bgcolor=theme['sidebar_color'], width=Dim(1), height=Dim(0, 100), y=Dim(1, -100))
+search_bar = TextInput(parent=app, width=Dim(1, -600), height=Dim(0.05), x=Dim(0, 350), y=Dim(0.02), placeholder="Search...", bgcolor=theme['search_bar_color'], focused_bgcolor=theme['search_bar_focused_color'], font_name=theme['font'], font_size=20)
+playing_widget = Widget(parent=app, bgcolor=theme['player_bar_color'], width=Dim(1), height=Dim(0, 100), y=Dim(1, -100))
 play_button_size = 50
-play_button = Button(parent=playing_widget, text="", width=Dim(0, play_button_size), height=Dim(0, play_button_size), x=Dim(0.5, -play_button_size//2),y=Dim(0.5, -play_button_size//2), bgcolor=theme['hover_color'], pressed_bgcolor=theme['pressed_color'],hover_bgcolor=theme['pressed_color'], on_press=toggle_playing)
+play_button = Button(parent=playing_widget, text="", width=Dim(0, play_button_size), height=Dim(0, play_button_size), x=Dim(0.5, -play_button_size//2), y=Dim(0.5, -play_button_size//2), bgcolor=theme['play_button_color'], pressed_bgcolor=theme['play_button_pressed_color'], hover_bgcolor=theme['play_button_hover_color'], on_press=toggle_playing)
 play_button_image = ImageLabel(parent=play_button, image="./icons/play.png", width=Dim(0.6), height=Dim(0.6), x=Dim(0.2), y=Dim(0.2))
-volume_slider = Slider(parent=playing_widget, width=Dim(0.15), height=Dim(0.05), x=Dim(0.85), y=Dim(0.5), min_val=0, max_val=100, initial_val=50, bgcolor=theme['background_color'], thumb_color=theme['hover_color'], on_change=slider_change)
+volume_slider = Slider(parent=playing_widget, width=Dim(0.15), height=Dim(0.05), x=Dim(0.85), y=Dim(0.5), min_val=0, max_val=100, initial_val=50, bgcolor=theme['slider_background_color'], thumb_color=theme['slider_thumb_color'], fill_color=theme['slider_fill_color'], on_change=slider_change)
 
-image_label = ImageLabel(parent=playing_widget, width=Dim(0, 100), height=Dim(0, 100), x=Dim(0.03), y=Dim(0), bgcolor="#777777")
+image_label = ImageLabel(parent=playing_widget, width=Dim(0, 100), height=Dim(0, 100), x=Dim(0.03), y=Dim(0), bgcolor=theme['album_art_color'])
 track_label = TextLabel(parent=playing_widget, width=Dim(0.2), height=Dim(0.5), x=Dim(0.07, 100), y=Dim(0), text="Track Name", align="left", font_size=30, font_name=theme['font'])
 artist_label = TextLabel(parent=playing_widget, width=Dim(0.2), height=Dim(0.5), x=Dim(0.07, 100), y=Dim(0.5), text="Artist Name", align="left", font_size=30, font_name=theme['font'])
 
@@ -66,10 +66,10 @@ def make_header(text, y):
 
 def make_nav_button(text, y):
     button = Button(parent=sidebar, width=Dim(1), height=Dim(ROW_HEIGHT),
-                  text=f" • {text}", align="left", font_size=24,font_name=theme['font'], y=Dim(y),
-                  bgcolor=theme['sidebar_color'],
-                  hover_bgcolor=theme['hover_color'],
-                  pressed_bgcolor=theme['pressed_color'])
+                  text=f" • {text}", align="left", font_size=24, font_name=theme['font'], y=Dim(y),
+                  bgcolor=theme['nav_button_color'],
+                  hover_bgcolor=theme['nav_button_hover_color'],
+                  pressed_bgcolor=theme['nav_button_pressed_color'])
     image_path = f"./icons/{text.lower()}.png"
     if Path(image_path).exists():
         icon = ImageLabel(parent=button, image=image_path, width=Dim(0.2), height=Dim(0.6), y=Dim(0.2), x=Dim(0.8))
