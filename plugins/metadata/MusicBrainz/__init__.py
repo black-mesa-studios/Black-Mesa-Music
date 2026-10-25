@@ -1,1 +1,0 @@
-from .mb_core import Plugin

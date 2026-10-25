@@ -1,1 +1,0 @@
-from .lrclib_core import Plugin
