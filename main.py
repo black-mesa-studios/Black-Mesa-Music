@@ -3,7 +3,7 @@ from pathlib import Path
 import sys, json, requests, os
 from nyuGUI.core import Dim, Widget, Root
 from nyuGUI.widgets import TextInput, TextLabel, ImageLabel, Button, Slider
-
+from pprint import pprint
 GITHUB_OWNER = "black-mesa-studios"
 GITHUB_REPO = "Black-Mesa-Music-Extensions"
 
@@ -204,7 +204,9 @@ if plugins_dir.exists():
 
               spec.loader.exec_module(plugin_module)
 
-              if category in loaded_plugins:
-                loaded_plugins[category].append(plugin_module.Plugin("config.json"))
+              with open(str(plugin_folder / "data.json"), "r") as f:
+                plugin_data = json.load(f)
 
+              if category in loaded_plugins:
+                loaded_plugins[category].append([plugin_module.Plugin("config.json"), plugin_data])
 app.run()
