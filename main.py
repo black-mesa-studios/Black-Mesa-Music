@@ -132,9 +132,9 @@ def plugin_button_colors(state):
   return base, hover, pressed
 
 INSTALLED_ROW_STEP = 102
-installed_buttons = {}              # (category, id) -> delete button in the installed tab
-installed_rows = []                 # rows we created, so we never depend on .children
-installed_lock = threading.RLock()  # install/remove threads can finish at the same time
+installed_buttons = {}
+installed_rows = []
+installed_lock = threading.RLock()
 
 def scan_installed_plugins():
   """Returns a sorted list of (category, plugin_id, data) for every plugin folder with a data.json."""
@@ -160,7 +160,6 @@ def scan_installed_plugins():
 
 def refresh_installed_tab():
   with installed_lock:
-    # Destroy only the rows we made, then rebuild from scratch
     for row in installed_rows:
       row.destroy()
     installed_rows.clear()
@@ -238,8 +237,8 @@ plugins_store_widget = Widget(parent=plugins_tab, bgcolor=theme['tab_color'],
 executor = ThreadPoolExecutor(max_workers=1)
 store_plugins = []
 
-store_row_buttons = {}   # (category, id) -> list of [row, button, plugin] (one per frame it appears in)
-busy_plugins = set()     # (category, id) currently installing/removing
+store_row_buttons = {}
+busy_plugins = set()
 action_executor = ThreadPoolExecutor(max_workers=2)
 
 def is_plugin_installed(category, plugin_id):
@@ -272,7 +271,6 @@ def make_action_button(row, plugin):
     return btn
 
 def refresh_store_buttons(category, plugin_id):
-    # Destroy each old button and build a fresh one with the right icon
     for entry in store_row_buttons.get((category, plugin_id), []):
         row, old_btn, plugin = entry
         old_btn.destroy()
@@ -285,7 +283,6 @@ def toggle_plugin(plugin):
     busy_plugins.add(key)
     installed = is_plugin_installed(*key)
 
-    # Gray out every button for this plugin while the work is running
     color, hover, pressed = plugin_button_colors("downloading")
     for entry in store_row_buttons.get(key, []):
         entry[1].set_color(color, hover_color=hover, pressed_color=pressed)
@@ -385,12 +382,11 @@ def make_store_category_button(key, text, x):
     return btn
 
 all_button = make_store_category_button("all", "All", 0.025)
-plugins_scrolling_frame = store_category_widgets["all"]  # keep old name working
+plugins_scrolling_frame = store_category_widgets["all"]
 
 for i, category_dir in enumerate(p for p in Path("plugins").iterdir() if p.is_dir()):
     make_store_category_button(category_dir.name, category_dir.name.capitalize(), 0.247 + i * 0.22)
 
-# Start fetching only after the category widgets exist, so the callback can't run too early
 future = executor.submit(fetch_available_plugins_metadata)
 future.add_done_callback(on_metadata_loaded)
 
