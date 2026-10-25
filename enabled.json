@@ -1,0 +1,10 @@
+{
+  "themes": [
+    "test"
+  ],
+  "plugins": [
+    "lyrics/lrclib",
+    "metadata/MusicBrainz",
+    "music/youtube"
+  ]
+}

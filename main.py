@@ -112,6 +112,44 @@ with open(config_file, "r") as f:
 
 theme = config_data['app_theme_data']
 
+installed_lock = threading.RLock()
+ENABLED_FILE = "enabled.json"
+
+def load_enabled():
+  try:
+    with open(ENABLED_FILE, "r") as f:
+      data = json.load(f)
+  except (OSError, ValueError):
+    data = {}
+  data.setdefault("plugins", [])
+  return data
+
+enabled = load_enabled()
+
+def save_enabled():
+  with installed_lock:
+    with open(ENABLED_FILE, "w") as f:
+      json.dump(enabled, f, indent=2)
+
+def is_plugin_enabled(category, plugin_id):
+  return f"{category}/{plugin_id}" in enabled["plugins"]
+
+def set_plugin_enabled(category, plugin_id, value):
+  with installed_lock:
+    key = f"{category}/{plugin_id}"
+    if value and key not in enabled["plugins"]:
+      enabled["plugins"].append(key)
+    elif not value and key in enabled["plugins"]:
+      enabled["plugins"].remove(key)
+    save_enabled()
+
+def toggle_button_colors(is_enabled):
+  prefix = "enabled" if is_enabled else "disabled"
+  base = theme[f'plugin_toggle_button_{prefix}_color']
+  hover = theme.get(f'plugin_toggle_button_{prefix}_hover_color', base)
+  pressed = theme.get(f'plugin_toggle_button_{prefix}_pressed_color', base)
+  return base, hover, pressed
+
 playing = True
 def toggle_playing():
   global playing
@@ -125,7 +163,6 @@ def slider_change(value):
   global volume
   volume = value
 def plugin_button_colors(state):
-  """state is 'download', 'downloading' or 'delete'. Returns (color, hover_color, pressed_color) from the theme."""
   base = theme[f'plugin_{state}_color']
   hover = theme.get(f'plugin_{state}_hover_color', base)
   pressed = theme.get(f'plugin_{state}_pressed_color', base)
@@ -133,11 +170,19 @@ def plugin_button_colors(state):
 
 INSTALLED_ROW_STEP = 102
 installed_buttons = {}
+installed_toggle_buttons = {}
 installed_rows = []
-installed_lock = threading.RLock()
+
+def on_toggle_enabled(category, plugin_id):
+  new_state = not is_plugin_enabled(category, plugin_id)
+  set_plugin_enabled(category, plugin_id, new_state)
+  color, hover, pressed = toggle_button_colors(new_state)
+  btn = installed_toggle_buttons.get((category, plugin_id))
+  if btn:
+    btn.set_color(color, hover_color=hover, pressed_color=pressed)
+    btn.text = "ON" if new_state else "OFF"
 
 def scan_installed_plugins():
-  """Returns a sorted list of (category, plugin_id, data) for every plugin folder with a data.json."""
   found = []
   plugins_root = Path("plugins")
   if not plugins_root.is_dir():
@@ -164,6 +209,7 @@ def refresh_installed_tab():
       row.destroy()
     installed_rows.clear()
     installed_buttons.clear()
+    installed_toggle_buttons.clear()
 
     for index, (category, plugin_id, plugin_data) in enumerate(scan_installed_plugins()):
       row = Widget(parent=plugins_installed_widget, width=Dim(1), height=Dim(0, 100),
@@ -175,9 +221,18 @@ def refresh_installed_tab():
       TextLabel(parent=row, width=Dim(0.55), height=Dim(0.5), x=Dim(0.02), y=Dim(0.5),
                 text=plugin_data.get("Description", plugin_data.get("description", "")), align="left",
                 font_size=12, font_name=theme['font'])
-      TextLabel(parent=row, width=Dim(0.2), height=Dim(0.5), x=Dim(0.6), y=Dim(0.1),
+      TextLabel(parent=row, width=Dim(0.2), height=Dim(0.5), x=Dim(0.35), y=Dim(0.1),
                 text=category, align="left",
-                font_size=20, font_name=theme['font'])
+                font_size=18, font_name=theme['font'])
+
+      is_on = is_plugin_enabled(category, plugin_id)
+      t_color, t_hover, t_pressed = toggle_button_colors(is_on)
+      toggle_btn = Button(parent=row, width=Dim(0.2), height=Dim(0.4), x=Dim(0.6), y=Dim(0.3),
+                          text="ON" if is_on else "OFF", font_size=24, font_name=theme['font'],
+                          bgcolor=t_color, hover_bgcolor=t_hover, pressed_bgcolor=t_pressed,
+                          on_press=lambda c=category, p=plugin_id: on_toggle_enabled(c, p))
+      installed_toggle_buttons[(category, plugin_id)] = toggle_btn
+
       state = "downloading" if (category, plugin_id) in busy_plugins else "delete"
       color, hover, pressed = plugin_button_colors(state)
       delete_btn = Button(parent=row, text="", width=Dim(0, 50), height=Dim(0, 50),
@@ -293,8 +348,10 @@ def toggle_plugin(plugin):
         try:
             if installed:
                 remove_plugin_folder(*key)
+                set_plugin_enabled(*key, False)
             else:
-                download_plugin_folder(*key)
+                if download_plugin_folder(*key):
+                    set_plugin_enabled(*key, True)
         finally:
             busy_plugins.discard(key)
             refresh_store_buttons(*key)
@@ -338,7 +395,7 @@ def on_metadata_loaded(future):
     for frame in store_category_widgets.values():
         frame.canvas_h_dim = Dim(0, 102 * len(frame.children))
 
-STORE_ROW_HEIGHT = 0.07
+STORE_ROW_HEIGHT = 0.1
 
 store_category_widgets = {}
 store_category_buttons = {}
@@ -371,7 +428,7 @@ def store_category_pressed(key):
 def make_store_category_button(key, text, x):
     selected = key == selected_store_category
     btn = Button(parent=plugins_store_widget, text=text,
-                 width=Dim(0.2), height=Dim(STORE_ROW_HEIGHT), x=Dim(x),
+                 width=Dim(0.2), height=Dim(STORE_ROW_HEIGHT - 0.03), x=Dim(x), y=Dim(0.01),
                  font_size=24, font_name=theme['font'],
                  bgcolor=theme['nav_button_selected_color'] if selected else theme['nav_button_color'],
                  hover_bgcolor=theme['nav_button_selected_color'] if selected else theme['nav_button_hover_color'],
@@ -491,37 +548,36 @@ loaded_plugins = {
 }
 
 plugins_dir = Path("plugins")
-
 if plugins_dir.exists():
   for category_dir in plugins_dir.iterdir():
     if category_dir.is_dir():
       category = category_dir.name
 
       for plugin_folder in category_dir.iterdir():
-        if plugin_folder.is_dir():
-          init_file = plugin_folder / "__init__.py"
+        if plugin_folder.is_dir() and f"{category_dir.name}/{plugin_folder.name}" in enabled['plugins']:
+            init_file = plugin_folder / "__init__.py"
 
-          if init_file.is_file():
-            plugin_name = plugin_folder.name
-            module_name = f"plugins.{category}.{plugin_name}"
+            if init_file.is_file():
+                plugin_name = plugin_folder.name
+                module_name = f"plugins.{category}.{plugin_name}"
 
-            spec = importlib.util.spec_from_file_location(
-                module_name,
-                str(init_file),
-                submodule_search_locations=[str(plugin_folder)],
-            )
+                spec = importlib.util.spec_from_file_location(
+                    module_name,
+                    str(init_file),
+                    submodule_search_locations=[str(plugin_folder)],
+                )
 
-            if spec is not None and spec.loader is not None:
-              plugin_module = importlib.util.module_from_spec(spec)
-              sys.modules[module_name] = plugin_module
+                if spec is not None and spec.loader is not None:
+                    plugin_module = importlib.util.module_from_spec(spec)
+                    sys.modules[module_name] = plugin_module
 
-              spec.loader.exec_module(plugin_module)
+                    spec.loader.exec_module(plugin_module)
 
-              with open(str(plugin_folder / "data.json"), "r") as f:
-                plugin_data = json.load(f)
+                    with open(str(plugin_folder / "data.json"), "r") as f:
+                        plugin_data = json.load(f)
 
-              if category in loaded_plugins:
-                loaded_plugins[category].append([plugin_module.Plugin("config.json"), plugin_data])
+                    if category in loaded_plugins:
+                        loaded_plugins[category].append([plugin_module.Plugin("config.json"), plugin_data])
 
 update_everything_downloading()
 app.run()
