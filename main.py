@@ -3,7 +3,6 @@ from pathlib import Path
 import sys, json
 from nyuGUI.core import Dim, Widget, Root
 from nyuGUI.widgets import TextInput, TextLabel, ImageLabel, Button, Slider
-from pprint import pprint
 
 def get_formatted_folder_size(folder_path):
   path = Path(folder_path)
@@ -58,23 +57,6 @@ image_label = ImageLabel(parent=playing_widget, width=Dim(0, 100), height=Dim(0,
 track_label = TextLabel(parent=playing_widget, width=Dim(0.2), height=Dim(0.5), x=Dim(0.07, 100), y=Dim(0), text="Track Name", align="left", font_size=30, font_name=theme['font'])
 artist_label = TextLabel(parent=playing_widget, width=Dim(0.2), height=Dim(0.5), x=Dim(0.07, 100), y=Dim(0.5), text="Artist Name", align="left", font_size=30, font_name=theme['font'])
 
-ROW_HEIGHT = 0.06
-
-def make_header(text, y):
-    return TextLabel(parent=sidebar, width=Dim(1), height=Dim(ROW_HEIGHT),
-                     text=text, align="center", font_size=30, y=Dim(y), font_name=theme['font'])
-
-def make_nav_button(text, y):
-    button = Button(parent=sidebar, width=Dim(1), height=Dim(ROW_HEIGHT),
-                  text=f" • {text}", align="left", font_size=24, font_name=theme['font'], y=Dim(y),
-                  bgcolor=theme['nav_button_color'],
-                  hover_bgcolor=theme['nav_button_hover_color'],
-                  pressed_bgcolor=theme['nav_button_pressed_color'])
-    image_path = f"./icons/{text.lower()}.png"
-    if Path(image_path).exists():
-        icon = ImageLabel(parent=button, image=image_path, width=Dim(0.2), height=Dim(0.6), y=Dim(0.2), x=Dim(0.8))
-    return button
-
 SECTIONS = [
     ("Library", ["Liked", "Playlists", "Artists", "Albums"]),
     ("Offline", ["Downloads", "Import"]),
@@ -82,17 +64,64 @@ SECTIONS = [
     ("System",  ["Settings"]),
 ]
 
+def make_tab(name):
+    return Widget(parent=app, bgcolor=theme['tab_color'],
+                  width=Dim(1, -250), height=Dim(1 - 0.075, -100),
+                  x=Dim(0, 250), y=Dim(0.075),
+                  visible=name == "liked")
+
+widgets = {
+    name.lower(): make_tab(name.lower())
+    for _, names in SECTIONS
+    for name in names
+}
+ROW_HEIGHT = 0.06
+def nav_button_pressed(button):
+    global selected_button
+    if selected_button:
+        selected_button.set_color(theme['nav_button_color'], hover_color=theme['nav_button_hover_color'], pressed_color=theme['nav_button_pressed_color'])
+        widget_name = selected_button.text.strip(" •").lower()
+        if widget_name in widgets:
+            widgets[widget_name].visible = False
+    selected_button = button
+    button.set_color(theme['nav_button_selected_color'], hover_color=theme['nav_button_selected_color'], pressed_color=theme['nav_button_selected_color'])
+    widget_name = button.text.strip(" •").lower()
+    if widget_name in widgets:
+        widgets[widget_name].visible = True
+
+def make_header(text, y):
+    return TextLabel(parent=sidebar, width=Dim(1), height=Dim(ROW_HEIGHT),
+                     text=text, align="center", font_size=30, y=Dim(y), font_name=theme['font'])
+
+def make_nav_button(text, y):
+  bg_color = theme['nav_button_color']
+  if text.lower() == "liked":
+    bg_color = theme['nav_button_selected_color']
+
+  button = Button(parent=sidebar, width=Dim(1), height=Dim(ROW_HEIGHT),
+                  text=f" • {text}", align="left", font_size=24, font_name=theme['font'], y=Dim(y),
+                  bgcolor=bg_color,
+                  hover_bgcolor=theme['nav_button_hover_color'],
+                  pressed_bgcolor=theme['nav_button_pressed_color'],
+                  on_press=lambda: nav_button_pressed(button))
+  image_path = f"./icons/{text.lower()}.png"
+  if Path(image_path).exists():
+      icon = ImageLabel(parent=button, image=image_path, width=Dim(0.2), height=Dim(0.6), y=Dim(0.2), x=Dim(0.8))
+  return button
+
+selected_button = None
 headers = {}
 buttons = {}
 
-y = 0
+y = 0.02
 for header_text, button_names in SECTIONS:
     headers[header_text] = make_header(header_text, y)
     y += ROW_HEIGHT
     for name in button_names:
         buttons[name.lower()] = make_nav_button(name, y)
+        if name.lower() == "liked":
+            selected_button = buttons[name.lower()]
         y += ROW_HEIGHT
-
 download_space_label = TextLabel(parent=sidebar, width=Dim(0.85), height=Dim(0.1), y=Dim(0.885), x=Dim(0.15),
                                  text=get_formatted_folder_size("downloads"),
                                  align="center", font_size=30, font_name=theme['font'])

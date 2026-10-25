@@ -4,10 +4,12 @@
     },
     "app_theme_data": {
         "app_background_color": "#0F0F0F",
+        "tab_color": "#131313",
         "sidebar_color": "#131313",
         "nav_button_color": "#131313",
         "nav_button_hover_color": "#333333",
         "nav_button_pressed_color": "#444444",
+        "nav_button_selected_color": "#444444",
         "search_bar_color": "#0F0F0F",
         "search_bar_focused_color": "#0F0F0F",
         "player_bar_color": "#131313",
@@ -18,6 +20,6 @@
         "slider_thumb_color": "#333333",
         "slider_fill_color": "#FFFFFF",
         "album_art_color": "#444444",
-        "font": "Hack"
+        "font": "JetBrainsMono Nerd Font"
     }
 }
