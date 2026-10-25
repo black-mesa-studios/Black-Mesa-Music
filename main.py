@@ -54,8 +54,8 @@ play_button_image = ImageLabel(parent=play_button, image="./icons/play.png", wid
 volume_slider = Slider(parent=playing_widget, width=Dim(0.15), height=Dim(0.05), x=Dim(0.85), y=Dim(0.5), min_val=0, max_val=100, initial_val=50, bgcolor=theme['slider_background_color'], thumb_color=theme['slider_thumb_color'], fill_color=theme['slider_fill_color'], on_change=slider_change)
 
 image_label = ImageLabel(parent=playing_widget, width=Dim(0, 100), height=Dim(0, 100), x=Dim(0.03), y=Dim(0), bgcolor=theme['album_art_color'])
-track_label = TextLabel(parent=playing_widget, width=Dim(0.2), height=Dim(0.5), x=Dim(0.07, 100), y=Dim(0), text="Track Name", align="left", font_size=30, font_name=theme['font'])
-artist_label = TextLabel(parent=playing_widget, width=Dim(0.2), height=Dim(0.5), x=Dim(0.07, 100), y=Dim(0.5), text="Artist Name", align="left", font_size=30, font_name=theme['font'])
+track_label = TextLabel(parent=playing_widget, width=Dim(0.2), height=Dim(0.5), x=Dim(0.07, 100), y=Dim(0), text="Track Name", align="left", font_size=24, font_name=theme['font'])
+artist_label = TextLabel(parent=playing_widget, width=Dim(0.2), height=Dim(0.5), x=Dim(0.07, 100), y=Dim(0.5), text="Artist Name", align="left", font_size=24, font_name=theme['font'])
 
 SECTIONS = [
     ("Library", ["Liked", "Playlists", "Artists", "Albums"]),
