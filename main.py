@@ -4,6 +4,7 @@ import sys, json, requests, os
 from nyuGUI.core import Dim, Widget, Root
 from nyuGUI.widgets import TextInput, TextLabel, ImageLabel, Button, Slider
 from pprint import pprint
+
 GITHUB_OWNER = "black-mesa-studios"
 GITHUB_REPO = "Black-Mesa-Music-Extensions"
 
@@ -29,8 +30,6 @@ def download_plugin_folder(category, plugin_name):
         print(f"Plugin '{plugin_name}' under category '{category}' not found in repository.")
         return False
 
-    print(f"Downloading plugin '{plugin_name}' ({len(plugin_files)} files)...")
-
     for file_item in plugin_files:
         file_path = file_item["path"]
         raw_url = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/main/{file_path}"
@@ -46,6 +45,40 @@ def download_plugin_folder(category, plugin_name):
                 f.write(file_response.text)
 
     return True
+
+def fetch_available_plugins_metadata():
+    tree_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/git/trees/main?recursive=1"
+    
+    try:
+        response = requests.get(tree_url)
+        response.raise_for_status()
+        tree_data = response.json().get("tree", [])
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching repository tree: {e}")
+        return []
+
+    plugins_metadata = []
+
+    for item in tree_data:
+        path = item["path"]
+        if path.startswith("plugins/") and path.endswith("data.json") and item["type"] == "blob":
+            parts = path.split("/")
+            if len(parts) == 4:
+                category = parts[1]
+                plugin_id = parts[2]
+                
+                raw_url = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/main/{path}"
+                try:
+                    res = requests.get(raw_url)
+                    if res.status_code == 200:
+                        meta = res.json()
+                        meta["category"] = category
+                        meta["id"] = plugin_id
+                        plugins_metadata.append(meta)
+                except Exception as e:
+                    print(f"Failed to load metadata for {plugin_id}: {e}")
+
+    return plugins_metadata
 
 def get_formatted_folder_size(folder_path):
   path = Path(folder_path)
@@ -86,6 +119,7 @@ volume = 50
 def slider_change(value):
   global volume
   volume = value
+
 app = Root(title="Music App", bgcolor=theme['app_background_color'])
 sidebar = Widget(parent=app, bgcolor=theme['sidebar_color'], width=Dim(0, 250), height=Dim(1, -100))
 search_image = ImageLabel(parent=app, image="./icons/search.png", width=Dim(0, 30), height=Dim(0.05), x=Dim(0, 290), y=Dim(0.02))
@@ -109,7 +143,7 @@ SECTIONS = [
 
 def make_tab(name):
     return Widget(parent=app, bgcolor=theme['tab_color'],
-                  width=Dim(1, -250), height=Dim(1 - 0.075, -100),
+                  width=Dim(1, -250), height=Dim(0.925, -100),
                   x=Dim(0, 250), y=Dim(0.075),
                   visible=name == "liked")
 
@@ -118,6 +152,59 @@ widgets = {
     for _, names in SECTIONS
     for name in names
 }
+
+plugins_tab = widgets["plugins"]
+
+plugins_selected_widget = Widget(parent=plugins_tab, bgcolor=theme['tab_color'],
+                                 width=Dim(1), height=Dim(0.9), y=Dim(0.1))
+plugins_installed_widget = Widget(parent=plugins_tab, bgcolor=theme['tab_color'],
+                                  width=Dim(1), height=Dim(0.9), y=Dim(0.1), visible=False)
+plugins_store_widget = Widget(parent=plugins_tab, bgcolor=theme['tab_color'],
+                              width=Dim(1), height=Dim(0.9), y=Dim(0.1), visible=False)
+
+plugin_widgets = {
+    "selected": plugins_selected_widget,
+    "installed": plugins_installed_widget,
+    "store": plugins_store_widget,
+}
+
+selected_plugins_button = None
+
+def plugins_type_button_pressed(button):
+    global selected_plugins_button
+
+    if selected_plugins_button:
+        selected_plugins_button.set_color(
+            theme['nav_button_color'],
+            hover_color=theme['nav_button_hover_color'],
+            pressed_color=theme['nav_button_pressed_color'])
+        old_name = selected_plugins_button.text.strip(" •").lower()
+        if old_name in plugin_widgets:
+            plugin_widgets[old_name].visible = False
+
+    selected_plugins_button = button
+    button.set_color(
+        theme['nav_button_selected_color'],
+        hover_color=theme['nav_button_selected_color'],
+        pressed_color=theme['nav_button_selected_color'])
+    new_name = button.text.strip(" •").lower()
+    if new_name in plugin_widgets:
+        plugin_widgets[new_name].visible = True
+
+def make_plugin_tab_button(text, x, bg):
+    btn = Button(parent=plugins_tab, width=Dim(0.2), height=Dim(0.07),
+                 x=Dim(x), y=Dim(0.02), text=text, font_size=24,
+                 font_name=theme['font'], bgcolor=bg,
+                 hover_bgcolor=theme['nav_button_hover_color'],
+                 pressed_bgcolor=theme['nav_button_pressed_color'],
+                 on_press=lambda: plugins_type_button_pressed(btn))
+    return btn
+
+plugins_selected_button = make_plugin_tab_button("Selected", 0.05, theme['nav_button_selected_color'])
+plugins_installed_button = make_plugin_tab_button("Installed", 0.3, theme['nav_button_color'])
+plugins_store_button = make_plugin_tab_button("Store", 0.55, theme['nav_button_color'])
+selected_plugins_button = plugins_selected_button
+
 ROW_HEIGHT = 0.06
 def nav_button_pressed(button):
     global selected_button
@@ -209,4 +296,5 @@ if plugins_dir.exists():
 
               if category in loaded_plugins:
                 loaded_plugins[category].append([plugin_module.Plugin("config.json"), plugin_data])
+
 app.run()
