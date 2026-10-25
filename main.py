@@ -1,8 +1,51 @@
 import importlib.util
 from pathlib import Path
-import sys, json
+import sys, json, requests, os
 from nyuGUI.core import Dim, Widget, Root
 from nyuGUI.widgets import TextInput, TextLabel, ImageLabel, Button, Slider
+
+GITHUB_OWNER = "black-mesa-studios"
+GITHUB_REPO = "Black-Mesa-Music-Extensions"
+
+def download_plugin_folder(category, plugin_name):
+    tree_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/git/trees/main?recursive=1"
+    
+    try:
+        response = requests.get(tree_url)
+        response.raise_for_status()
+        tree_data = response.json().get("tree", [])
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching repository tree: {e}")
+        return False
+
+    target_prefix = f"plugins/{category}/{plugin_name}/"
+    
+    plugin_files = [
+        item for item in tree_data 
+        if item["path"].startswith(target_prefix) and item["type"] == "blob"
+    ]
+
+    if not plugin_files:
+        print(f"Plugin '{plugin_name}' under category '{category}' not found in repository.")
+        return False
+
+    print(f"Downloading plugin '{plugin_name}' ({len(plugin_files)} files)...")
+
+    for file_item in plugin_files:
+        file_path = file_item["path"]
+        raw_url = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/main/{file_path}"
+        
+        relative_path = file_path.replace("plugins/", "", 1)
+        local_file_path = os.path.join("plugins", relative_path)
+        
+        os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+        
+        file_response = requests.get(raw_url)
+        if file_response.status_code == 200:
+            with open(local_file_path, "w", encoding="utf-8") as f:
+                f.write(file_response.text)
+
+    return True
 
 def get_formatted_folder_size(folder_path):
   path = Path(folder_path)
