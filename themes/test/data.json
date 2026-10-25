@@ -1,5 +1,6 @@
 {
     "theme_type": "json",
+    "name": "test",
     "description": "Test theme",
     "app_theme_data": {
         "font": "Hack"

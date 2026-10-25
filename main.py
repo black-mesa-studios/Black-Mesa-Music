@@ -216,7 +216,7 @@ def refresh_installed_tab():
                    y=Dim(0, INSTALLED_ROW_STEP * index),
                    bgcolor=theme['plugins_background_color'])
       TextLabel(parent=row, width=Dim(0.55), height=Dim(0.5), x=Dim(0.02), y=Dim(0.1),
-                text=plugin_data.get("name", plugin_id), align="left",
+                text=plugin_data.get("Name", plugin_id), align="left",
                 font_size=24, font_name=theme['font'])
       TextLabel(parent=row, width=Dim(0.55), height=Dim(0.5), x=Dim(0.02), y=Dim(0.5),
                 text=plugin_data.get("Description", plugin_data.get("description", "")), align="left",
@@ -368,7 +368,7 @@ def add_store_plugin_row(frame, plugin):
     store_row_buttons.setdefault((plugin["category"], plugin["id"]), []).append([row, btn, plugin])
 
     TextLabel(parent=row, width=Dim(0.55), height=Dim(0.5), x=Dim(0.02), y=Dim(0.1),
-              text=plugin.get("name", plugin["id"]), align="left",
+              text=plugin.get("Name", plugin["id"]), align="left",
               font_size=24, font_name=theme['font'])
     TextLabel(parent=row, width=Dim(0.55), height=Dim(0.5), x=Dim(0.02), y=Dim(0.5),
               text=plugin.get("Description", plugin.get("description", "")), align="left",

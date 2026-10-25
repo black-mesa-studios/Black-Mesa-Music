@@ -1,5 +1,5 @@
 {
-    "name": "MusicBrainz",
+    "Name": "MusicBrainz",
     "Description": "A plugin for fetching metadata from MusicBrainz",
     "Author": "Wjanek13"
 }
