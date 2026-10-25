@@ -267,7 +267,7 @@ SECTIONS = [
     ("Library", ["Liked", "Playlists", "Artists", "Albums"]),
     ("Offline", ["Downloads", "Import"]),
     ("Custom",  ["Plugins", "Themes"]),
-    ("System",  ["Settings", "Sources"]),
+    ("System",  ["Settings"]),
 ]
 
 def make_tab(name):
