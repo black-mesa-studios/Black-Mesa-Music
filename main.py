@@ -3,17 +3,38 @@ from pathlib import Path
 import sys, json, requests, os, shutil, threading
 from concurrent.futures import ThreadPoolExecutor
 from nyuGUI.core import Dim, Widget, Root
-from nyuGUI.widgets import TextInput, TextLabel, ImageLabel, Button, Slider, ScrollingFrame
+from nyuGUI.widgets import TextInput, TextLabel as _TextLabel, ImageLabel, Button as _Button, Slider, ScrollingFrame
 from pprint import pprint
 
 GITHUB_OWNER = "black-mesa-studios"
 GITHUB_REPO = "Black-Mesa-Music-Extensions"
+ENABLED_FILE = "enabled.json"
+
+# Load Config & Setup GitHub Headers
+config_file = "config.json"
+with open(config_file, "r") as f:
+  config_data = json.load(f)
+
+GITHUB_TOKEN = config_data.get("github_token", "")
+API_HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}"} if GITHUB_TOKEN else {}
+
+def load_enabled():
+  try:
+    with open(ENABLED_FILE, "r") as f:
+      data = json.load(f)
+  except (OSError, ValueError):
+    data = {}
+  data.setdefault("plugins", [])
+  data.setdefault("themes", [])
+  return data
+
+enabled = load_enabled()
 
 def download_plugin_folder(category, plugin_name):
     tree_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/git/trees/main?recursive=1"
     
     try:
-        response = requests.get(tree_url)
+        response = requests.get(tree_url, headers=API_HEADERS)
         response.raise_for_status()
         tree_data = response.json().get("tree", [])
     except requests.exceptions.RequestException as e:
@@ -40,7 +61,45 @@ def download_plugin_folder(category, plugin_name):
         
         os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
         
-        file_response = requests.get(raw_url)
+        file_response = requests.get(raw_url, headers=API_HEADERS)
+        if file_response.status_code == 200:
+            with open(local_file_path, "w", encoding="utf-8") as f:
+                f.write(file_response.text)
+
+    return True
+
+def download_theme_folder(theme_id):
+    tree_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/git/trees/main?recursive=1"
+    
+    try:
+        response = requests.get(tree_url, headers=API_HEADERS)
+        response.raise_for_status()
+        tree_data = response.json().get("tree", [])
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching repository tree: {e}")
+        return False
+
+    target_prefix = f"themes/{theme_id}/"
+    
+    theme_files = [
+        item for item in tree_data 
+        if item["path"].startswith(target_prefix) and item["type"] == "blob"
+    ]
+
+    if not theme_files:
+        print(f"Theme '{theme_id}' not found in repository.")
+        return False
+
+    for file_item in theme_files:
+        file_path = file_item["path"]
+        raw_url = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/main/{file_path}"
+        
+        relative_path = file_path.replace("themes/", "", 1)
+        local_file_path = os.path.join("themes", relative_path)
+        
+        os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+        
+        file_response = requests.get(raw_url, headers=API_HEADERS)
         if file_response.status_code == 200:
             with open(local_file_path, "w", encoding="utf-8") as f:
                 f.write(file_response.text)
@@ -50,7 +109,7 @@ def download_plugin_folder(category, plugin_name):
 def fetch_available_plugins_metadata():
     tree_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/git/trees/main?recursive=1"
     try:
-        response = requests.get(tree_url, timeout=10)
+        response = requests.get(tree_url, headers=API_HEADERS, timeout=10)
         response.raise_for_status()
         tree_data = response.json().get("tree", [])
     except requests.exceptions.RequestException as e:
@@ -62,7 +121,7 @@ def fetch_available_plugins_metadata():
         category, plugin_id = parts[1], parts[2]
         raw_url = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/main/{path}"
         try:
-            res = requests.get(raw_url, timeout=10)
+            res = requests.get(raw_url, headers=API_HEADERS, timeout=10)
             if res.status_code == 200:
                 meta = res.json()
                 meta["category"] = category
@@ -78,6 +137,43 @@ def fetch_available_plugins_metadata():
         and item["path"].startswith("plugins/")
         and item["path"].endswith("data.json")
         and len(item["path"].split("/")) == 4
+    ]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = pool.map(fetch_one, paths)
+
+    return [r for r in results if r]
+
+def fetch_available_themes_metadata():
+    tree_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/git/trees/main?recursive=1"
+    try:
+        response = requests.get(tree_url, headers=API_HEADERS, timeout=10)
+        response.raise_for_status()
+        tree_data = response.json().get("tree", [])
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching repository tree: {e}")
+        return []
+
+    def fetch_one(path):
+        parts = path.split("/")
+        theme_id = parts[1]
+        raw_url = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/main/{path}"
+        try:
+            res = requests.get(raw_url, headers=API_HEADERS, timeout=10)
+            if res.status_code == 200:
+                meta = res.json()
+                meta["id"] = theme_id
+                return meta
+        except Exception as e:
+            print(f"Failed to load metadata for theme {theme_id}: {e}")
+        return None
+
+    paths = [
+        item["path"] for item in tree_data
+        if item["type"] == "blob"
+        and item["path"].startswith("themes/")
+        and item["path"].endswith("data.json")
+        and len(item["path"].split("/")) == 3
     ]
 
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -106,25 +202,46 @@ def get_formatted_folder_size(folder_path):
   return f"{size:.1f} {units[unit_index]}"
 
 sys.dont_write_bytecode = True
-config_file = "config.json"
-with open(config_file, "r") as f:
-  config_data = json.load(f)
-
 theme = config_data['app_theme_data']
 
+app = Root(title="Music App", bgcolor=theme['app_background_color'])
+
+for theme_plugin in Path("themes").iterdir():
+    data_file = theme_plugin / "data.json"
+    if not data_file.exists():
+        continue
+    with open(data_file, 'r') as f:
+        if not theme_plugin.name in enabled['themes']: continue
+        data = json.load(f)
+        theme_type = data['Theme_Type']
+
+        if theme_type == "json":
+            for key, value in data['app_theme_data'].items():
+                theme[key] = value
+        elif theme_type == "script":
+            file_path = theme_plugin / "plugin.py"
+            if file_path.exists():
+                module_name = f"theme_{theme_plugin.name}"
+
+                spec = importlib.util.spec_from_file_location(module_name, file_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+
+                if hasattr(module, "__init__"):
+                    init_function = getattr(module, "__init__")
+                    init_function(app)
+
+def TextLabel(*args, **kwargs):
+    kwargs.setdefault("text_color", theme.get("text_color", "#FFFFFF"))
+    return _TextLabel(*args, **kwargs)
+
+
+def Button(*args, **kwargs):
+    kwargs.setdefault("text_color", theme.get("text_color", "#FFFFFF"))
+    return _Button(*args, **kwargs)
+
 installed_lock = threading.RLock()
-ENABLED_FILE = "enabled.json"
 
-def load_enabled():
-  try:
-    with open(ENABLED_FILE, "r") as f:
-      data = json.load(f)
-  except (OSError, ValueError):
-    data = {}
-  data.setdefault("plugins", [])
-  return data
-
-enabled = load_enabled()
 
 def save_enabled():
   with installed_lock:
@@ -142,6 +259,33 @@ def set_plugin_enabled(category, plugin_id, value):
     elif not value and key in enabled["plugins"]:
       enabled["plugins"].remove(key)
     save_enabled()
+
+def is_theme_enabled(theme_id):
+  return theme_id in enabled["themes"]
+
+def set_theme_enabled(theme_id, value):
+  with installed_lock:
+    if value and theme_id not in enabled["themes"]:
+      enabled["themes"].append(theme_id)
+    elif not value and theme_id in enabled["themes"]:
+      enabled["themes"].remove(theme_id)
+    save_enabled()
+
+def theme_toggle_button_colors(is_enabled):
+  prefix = "enabled" if is_enabled else "disabled"
+  base = theme.get(f"theme_toggle_button_{prefix}_color", "#00BB00" if is_enabled else "#CC0000")
+  hover = theme.get(f"theme_toggle_button_{prefix}_hover_color", base)
+  pressed = theme.get(f"theme_toggle_button_{prefix}_pressed_color", base)
+  return base, hover, pressed
+
+def on_toggle_theme(theme_id):
+  new_state = not is_theme_enabled(theme_id)
+  set_theme_enabled(theme_id, new_state)
+  button = installed_theme_toggle_buttons.get(theme_id)
+  if button:
+    color, hover, pressed = theme_toggle_button_colors(new_state)
+    button.set_color(color, hover_color=hover, pressed_color=pressed)
+    button.text = "ON" if new_state else "OFF"
 
 def toggle_button_colors(is_enabled):
   prefix = "enabled" if is_enabled else "disabled"
@@ -162,10 +306,10 @@ volume = 50
 def slider_change(value):
   global volume
   volume = value
-def plugin_button_colors(state):
-  base = theme[f'plugin_{state}_color']
-  hover = theme.get(f'plugin_{state}_hover_color', base)
-  pressed = theme.get(f'plugin_{state}_pressed_color', base)
+def plugin_button_colors(area, state):
+  base = theme[f'{area}_plugin_{state}_color']
+  hover = theme.get(f'{area}_plugin_{state}_hover_color', base)
+  pressed = theme.get(f'{area}_plugin_{state}_pressed_color', base)
   return base, hover, pressed
 
 INSTALLED_ROW_STEP = 102
@@ -214,7 +358,7 @@ def refresh_installed_tab():
     for index, (category, plugin_id, plugin_data) in enumerate(scan_installed_plugins()):
       row = Widget(parent=plugins_installed_widget, width=Dim(1), height=Dim(0, 100),
                    y=Dim(0, INSTALLED_ROW_STEP * index),
-                   bgcolor=theme['plugins_background_color'])
+                   bgcolor=theme['plugins_installed_row_color'])
       TextLabel(parent=row, width=Dim(0.55), height=Dim(0.5), x=Dim(0.02), y=Dim(0.1),
                 text=plugin_data.get("Name", plugin_id), align="left",
                 font_size=24, font_name=theme['font'])
@@ -234,7 +378,7 @@ def refresh_installed_tab():
       installed_toggle_buttons[(category, plugin_id)] = toggle_btn
 
       state = "downloading" if (category, plugin_id) in busy_plugins else "delete"
-      color, hover, pressed = plugin_button_colors(state)
+      color, hover, pressed = plugin_button_colors("installed", state)
       delete_btn = Button(parent=row, text="", width=Dim(0, 50), height=Dim(0, 50),
                           x=Dim(1, -70), y=Dim(0.5, -25),
                           bgcolor=color, hover_bgcolor=hover, pressed_bgcolor=pressed,
@@ -249,7 +393,8 @@ def refresh_installed_tab():
 def update_everything_downloading():
   download_space_label.text = get_formatted_folder_size("downloads")
   refresh_installed_tab()
-app = Root(title="Music App", bgcolor=theme['app_background_color'])
+  refresh_themes()
+
 sidebar = Widget(parent=app, bgcolor=theme['sidebar_color'], width=Dim(0, 250), height=Dim(1, -100))
 search_image = ImageLabel(parent=app, image="./icons/search.png", width=Dim(0, 30), height=Dim(0.05), x=Dim(0, 290), y=Dim(0.02))
 search_bar = TextInput(parent=app, width=Dim(1, -600), height=Dim(0.05), x=Dim(0, 350), y=Dim(0.02), placeholder="Search...", bgcolor=theme['search_bar_color'], focused_bgcolor=theme['search_bar_focused_color'], font_name=theme['font'], font_size=20)
@@ -284,9 +429,9 @@ widgets = {
 
 plugins_tab = widgets["plugins"]
 
-plugins_installed_widget = ScrollingFrame(parent=plugins_tab, bgcolor=theme['tab_color'],
+plugins_installed_widget = ScrollingFrame(parent=plugins_tab, bgcolor=theme['plugins_installed_frame_color'],
                                   width=Dim(1), height=Dim(0.9), y=Dim(0.1), visible=True, canvas_height=Dim(2))
-plugins_store_widget = Widget(parent=plugins_tab, bgcolor=theme['tab_color'],
+plugins_store_widget = Widget(parent=plugins_tab, bgcolor=theme['plugins_store_frame_color'],
                               width=Dim(1), height=Dim(0.9), y=Dim(0.1), visible=False)
 
 executor = ThreadPoolExecutor(max_workers=1)
@@ -316,7 +461,7 @@ def make_action_button(row, plugin):
         state = "downloading"
     else:
         state = "delete" if installed else "download"
-    color, hover, pressed = plugin_button_colors(state)
+    color, hover, pressed = plugin_button_colors("store", state)
     btn = Button(parent=row, text="", width=Dim(0, 50), height=Dim(0, 50),
                  x=Dim(1, -70), y=Dim(0.5, -25),
                  bgcolor=color, hover_bgcolor=hover, pressed_bgcolor=pressed,
@@ -338,10 +483,11 @@ def toggle_plugin(plugin):
     busy_plugins.add(key)
     installed = is_plugin_installed(*key)
 
-    color, hover, pressed = plugin_button_colors("downloading")
+    color, hover, pressed = plugin_button_colors("store", "downloading")
     for entry in store_row_buttons.get(key, []):
         entry[1].set_color(color, hover_color=hover, pressed_color=pressed)
     if key in installed_buttons:
+        color, hover, pressed = plugin_button_colors("installed", "downloading")
         installed_buttons[key].set_color(color, hover_color=hover, pressed_color=pressed)
 
     def work():
@@ -362,7 +508,7 @@ def toggle_plugin(plugin):
 def add_store_plugin_row(frame, plugin):
     row = Widget(parent=frame, width=Dim(1), height=Dim(0, 100),
                  y=Dim(0, 102 * len(frame.children)),
-                 bgcolor=theme['plugins_background_color'])
+                 bgcolor=theme['plugins_store_row_color'])
 
     btn = make_action_button(row, plugin)
     store_row_buttons.setdefault((plugin["category"], plugin["id"]), []).append([row, btn, plugin])
@@ -402,7 +548,7 @@ store_category_buttons = {}
 selected_store_category = "all"
 
 def make_store_category_widget(visible):
-    return ScrollingFrame(parent=plugins_store_widget, bgcolor=theme['tab_color'],
+    return ScrollingFrame(parent=plugins_store_widget, bgcolor=theme['plugins_store_category_frame_color'],
                           width=Dim(1), height=Dim(1 - STORE_ROW_HEIGHT),
                           y=Dim(STORE_ROW_HEIGHT), visible=visible)
 
@@ -413,16 +559,16 @@ def store_category_pressed(key):
 
     old_button = store_category_buttons[selected_store_category]
     old_button.set_color(
-        theme['nav_button_color'],
-        hover_color=theme['nav_button_hover_color'],
-        pressed_color=theme['nav_button_pressed_color'])
+        theme['plugins_category_button_color'],
+        hover_color=theme['plugins_category_button_hover_color'],
+        pressed_color=theme['plugins_category_button_pressed_color'])
     store_category_widgets[selected_store_category].visible = False
 
     selected_store_category = key
     store_category_buttons[key].set_color(
-        theme['nav_button_selected_color'],
-        hover_color=theme['nav_button_selected_color'],
-        pressed_color=theme['nav_button_selected_color'])
+        theme['plugins_category_button_selected_color'],
+        hover_color=theme['plugins_category_button_selected_color'],
+        pressed_color=theme['plugins_category_button_selected_color'])
     store_category_widgets[key].visible = True
 
 def make_store_category_button(key, text, x):
@@ -430,9 +576,9 @@ def make_store_category_button(key, text, x):
     btn = Button(parent=plugins_store_widget, text=text,
                  width=Dim(0.2), height=Dim(STORE_ROW_HEIGHT - 0.03), x=Dim(x), y=Dim(0.01),
                  font_size=24, font_name=theme['font'],
-                 bgcolor=theme['nav_button_selected_color'] if selected else theme['nav_button_color'],
-                 hover_bgcolor=theme['nav_button_selected_color'] if selected else theme['nav_button_hover_color'],
-                 pressed_bgcolor=theme['nav_button_selected_color'] if selected else theme['nav_button_pressed_color'],
+                 bgcolor=theme['plugins_category_button_selected_color'] if selected else theme['plugins_category_button_color'],
+                 hover_bgcolor=theme['plugins_category_button_selected_color'] if selected else theme['plugins_category_button_hover_color'],
+                 pressed_bgcolor=theme['plugins_category_button_selected_color'] if selected else theme['plugins_category_button_pressed_color'],
                  on_press=lambda: store_category_pressed(key))
     store_category_buttons[key] = btn
     store_category_widgets[key] = make_store_category_widget(visible=selected)
@@ -459,18 +605,18 @@ def plugins_type_button_pressed(button):
 
     if selected_plugins_button:
         selected_plugins_button.set_color(
-            theme['nav_button_color'],
-            hover_color=theme['nav_button_hover_color'],
-            pressed_color=theme['nav_button_pressed_color'])
+            theme['plugins_tab_button_color'],
+            hover_color=theme['plugins_tab_button_hover_color'],
+            pressed_color=theme['plugins_tab_button_pressed_color'])
         old_name = selected_plugins_button.text.strip(" •").lower()
         if old_name in plugin_widgets:
             plugin_widgets[old_name].visible = False
 
     selected_plugins_button = button
     button.set_color(
-        theme['nav_button_selected_color'],
-        hover_color=theme['nav_button_selected_color'],
-        pressed_color=theme['nav_button_selected_color'])
+        theme['plugins_tab_button_selected_color'],
+        hover_color=theme['plugins_tab_button_selected_color'],
+        pressed_color=theme['plugins_tab_button_selected_color'])
     new_name = button.text.strip(" •").lower()
     if new_name in plugin_widgets:
         plugin_widgets[new_name].visible = True
@@ -479,13 +625,13 @@ def make_plugin_tab_button(text, x, bg):
     btn = Button(parent=plugins_tab, width=Dim(0.2), height=Dim(0.07),
                  x=Dim(x), y=Dim(0.02), text=text, font_size=24,
                  font_name=theme['font'], bgcolor=bg,
-                 hover_bgcolor=theme['nav_button_hover_color'],
-                 pressed_bgcolor=theme['nav_button_pressed_color'],
+                 hover_bgcolor=theme['plugins_tab_button_hover_color'],
+                 pressed_bgcolor=theme['plugins_tab_button_pressed_color'],
                  on_press=lambda: plugins_type_button_pressed(btn))
     return btn
 
-plugins_installed_button = make_plugin_tab_button("Installed", 0.05, theme['nav_button_selected_color'])
-plugins_store_button = make_plugin_tab_button("Store", 0.3, theme['nav_button_color'])
+plugins_installed_button = make_plugin_tab_button("Installed", 0.05, theme['plugins_tab_button_selected_color'])
+plugins_store_button = make_plugin_tab_button("Store", 0.3, theme['plugins_tab_button_color'])
 selected_plugins_button = plugins_installed_button
 
 ROW_HEIGHT = 0.06
@@ -547,6 +693,250 @@ loaded_plugins = {
     "lyrics": [],
 }
 
+themes_widget = widgets['themes']
+
+themes_installed_widget = ScrollingFrame(parent=themes_widget, bgcolor=theme['themes_installed_frame_color'],
+                                         width=Dim(1), height=Dim(0.9), y=Dim(0.1),
+                                         visible=True, canvas_height=Dim(2))
+
+themes_installed_rows = []
+installed_theme_toggle_buttons = {}
+installed_theme_buttons = {}
+
+def scan_installed_themes():
+    found = []
+    themes_root = Path("themes")
+    if not themes_root.is_dir():
+        return found
+    for theme_folder in sorted(themes_root.iterdir()):
+        data_file = theme_folder / "data.json"
+        if not (theme_folder.is_dir() and data_file.is_file()):
+            continue
+        try:
+            with open(data_file, "r", encoding="utf-8") as f:
+                theme_data = json.load(f)
+        except (OSError, ValueError) as e:
+            print(f"Could not read {data_file}: {e}")
+            continue
+        found.append((theme_folder.name, theme_data))
+    return found
+
+def refresh_themes():
+    with installed_lock:
+        for row in themes_installed_rows:
+            row.destroy()
+        themes_installed_rows.clear()
+        installed_theme_toggle_buttons.clear()
+        installed_theme_buttons.clear()
+
+        for index, (theme_id, theme_data) in enumerate(scan_installed_themes()):
+            row = Widget(parent=themes_installed_widget, width=Dim(1), height=Dim(0, 100),
+                         y=Dim(0, INSTALLED_ROW_STEP * index),
+                         bgcolor=theme['themes_installed_row_color'])
+            TextLabel(parent=row, width=Dim(0.42), height=Dim(0.5), x=Dim(0.02), y=Dim(0.1),
+                      text=theme_data.get("Name", theme_id), align="left",
+                      font_size=24, font_name=theme['font'])
+            TextLabel(parent=row, width=Dim(0.42), height=Dim(0.5), x=Dim(0.02), y=Dim(0.5),
+                      text=theme_data.get("Description", theme_data.get("description", "")), align="left",
+                      font_size=12, font_name=theme['font'])
+            TextLabel(parent=row, width=Dim(0.16), height=Dim(0.5), x=Dim(0.45), y=Dim(0.1),
+                      text=theme_data.get("Type", theme_data.get("type", "")), align="left",
+                      font_size=18, font_name=theme['font'])
+
+            is_on = is_theme_enabled(theme_id)
+            t_color, t_hover, t_pressed = theme_toggle_button_colors(is_on)
+            toggle_btn = Button(parent=row, width=Dim(0.18), height=Dim(0.4), x=Dim(0.7), y=Dim(0.3),
+                                text="ON" if is_on else "OFF", font_size=22, font_name=theme['font'],
+                                bgcolor=t_color, hover_bgcolor=t_hover, pressed_bgcolor=t_pressed,
+                                on_press=lambda tid=theme_id: on_toggle_theme(tid))
+            installed_theme_toggle_buttons[theme_id] = toggle_btn
+
+            state = "downloading" if theme_id in busy_themes else "delete"
+            color, hover, pressed = plugin_button_colors("installed", state)
+            delete_btn = Button(parent=row, text="", width=Dim(0, 50), height=Dim(0, 50),
+                                x=Dim(1, -70), y=Dim(0.5, -25),
+                                bgcolor=color, hover_bgcolor=hover, pressed_bgcolor=pressed,
+                                on_press=lambda tid=theme_id: toggle_theme_store({"id": tid}))
+            ImageLabel(parent=delete_btn, image="./icons/delete.png", width=Dim(0.6), height=Dim(0.6),
+                       x=Dim(0.2), y=Dim(0.2))
+            installed_theme_buttons[theme_id] = delete_btn
+
+            themes_installed_rows.append(row)
+
+        themes_installed_widget.canvas_h_dim = Dim(0, INSTALLED_ROW_STEP * len(themes_installed_rows))
+
+themes_store_widget = Widget(parent=themes_widget, bgcolor=theme['themes_store_frame_color'],
+                             width=Dim(1), height=Dim(0.9), y=Dim(0.1), visible=False)
+
+store_themes = []
+store_theme_row_buttons = {}
+busy_themes = set()
+
+def is_theme_installed(theme_id):
+    return (Path("themes") / theme_id).is_dir()
+
+def remove_theme_folder(theme_id):
+    folder = Path("themes") / theme_id
+    try:
+        shutil.rmtree(folder)
+        return True
+    except OSError as e:
+        print(f"Error removing theme '{theme_id}': {e}")
+        return False
+
+def make_theme_action_button(row, theme_item):
+    theme_id = theme_item["id"]
+    installed = is_theme_installed(theme_id)
+    icon_path = "./icons/delete.png" if installed else "./icons/downloads.png"
+    
+    if theme_id in busy_themes:
+        state = "downloading"
+    else:
+        state = "delete" if installed else "download"
+        
+    # Use specific theme store colors if available, otherwise fallback
+    if state == "download":
+        color = theme.get("themes_store_download_color", "#90EE90")
+        hover = theme.get("themes_store_download_hover_color", color)
+        pressed = theme.get("themes_store_download_pressed_color", color)
+    elif state == "downloading":
+        color = theme.get("themes_store_downloading_color", "#777777")
+        hover = color
+        pressed = color
+    else:
+        color = theme.get("themes_store_delete_color", "#D9534F")
+        hover = theme.get("themes_store_delete_hover_color", color)
+        pressed = theme.get("themes_store_delete_pressed_color", color)
+
+    btn = Button(parent=row, text="", width=Dim(0, 50), height=Dim(0, 50),
+                 x=Dim(1, -70), y=Dim(0.5, -25),
+                 bgcolor=color, hover_bgcolor=hover, pressed_bgcolor=pressed,
+                 on_press=lambda t=theme_item: toggle_theme_store(t))
+    ImageLabel(parent=btn, image=icon_path, width=Dim(0.6), height=Dim(0.6),
+               x=Dim(0.2), y=Dim(0.2))
+    return btn
+
+def refresh_store_theme_buttons(theme_id):
+    for entry in store_theme_row_buttons.get(theme_id, []):
+        row, old_btn, theme_item = entry
+        old_btn.destroy()
+        entry[1] = make_theme_action_button(row, theme_item)
+
+def toggle_theme_store(theme_item):
+    theme_id = theme_item["id"]
+    if theme_id in busy_themes:
+        return
+    busy_themes.add(theme_id)
+    installed = is_theme_installed(theme_id)
+
+    color = theme.get("themes_store_downloading_color", "#777777")
+    for entry in store_theme_row_buttons.get(theme_id, []):
+        entry[1].set_color(color, hover_color=color, pressed_color=color)
+    if theme_id in installed_theme_buttons:
+        installed_theme_buttons[theme_id].set_color(color, hover_color=color, pressed_color=color)
+
+    def work():
+        try:
+            if installed:
+                remove_theme_folder(theme_id)
+                set_theme_enabled(theme_id, False)
+            else:
+                if download_theme_folder(theme_id):
+                    set_theme_enabled(theme_id, True)
+        finally:
+            busy_themes.discard(theme_id)
+            refresh_store_theme_buttons(theme_id)
+            update_everything_downloading()
+
+    action_executor.submit(work)
+
+def add_store_theme_row(frame, theme_item):
+    row = Widget(parent=frame, width=Dim(1), height=Dim(0, 100),
+                 y=Dim(0, 102 * len(frame.children)),
+                 bgcolor=theme.get('themes_store_row_color', '#222222'))
+
+    btn = make_theme_action_button(row, theme_item)
+    store_theme_row_buttons.setdefault(theme_item["id"], []).append([row, btn, theme_item])
+
+    TextLabel(parent=row, width=Dim(0.55), height=Dim(0.5), x=Dim(0.02), y=Dim(0.1),
+              text=theme_item.get("Name", theme_item["id"]), align="left",
+              font_size=24, font_name=theme['font'])
+    TextLabel(parent=row, width=Dim(0.55), height=Dim(0.5), x=Dim(0.02), y=Dim(0.5),
+              text=theme_item.get("Description", theme_item.get("description", "")), align="left",
+              font_size=12, font_name=theme['font'])
+    TextLabel(parent=row, width=Dim(0.2), height=Dim(0.5), x=Dim(0.6), y=Dim(0.1),
+              text=theme_item.get("Type", theme_item.get("type", "Theme")), align="left",
+              font_size=20, font_name=theme['font'])
+    return row
+
+def on_themes_metadata_loaded(future):
+    global store_themes
+    try:
+        store_themes = future.result()
+    except Exception as e:
+        print(f"Failed to fetch theme metadata: {e}")
+        return
+
+    for theme_item in store_themes:
+        add_store_theme_row(themes_store_scrolling_frame, theme_item)
+
+    themes_store_scrolling_frame.canvas_h_dim = Dim(0, 102 * len(themes_store_scrolling_frame.children))
+
+themes_store_scrolling_frame = ScrollingFrame(parent=themes_store_widget, bgcolor=theme.get('themes_store_frame_color', '#111111'),
+                                              width=Dim(1), height=Dim(1), y=Dim(0), visible=True, canvas_height=Dim(2))
+
+theme_metadata_future = executor.submit(fetch_available_themes_metadata)
+theme_metadata_future.add_done_callback(on_themes_metadata_loaded)
+# ==========================================
+
+theme_widgets = {
+    "installed": themes_installed_widget,
+    "store": themes_store_widget,
+}
+
+selected_themes_button = None
+
+def set_theme_button_selected(button, selected):
+    if selected:
+        c = theme['themes_button_selected_color']
+        button.set_color(c, hover_color=c, pressed_color=c)
+    else:
+        button.set_color(
+            theme['themes_button_color'],
+            hover_color=theme['themes_button_hover_color'],
+            pressed_color=theme['themes_button_pressed_color'])
+
+def themes_type_button_pressed(button):
+    global selected_themes_button
+    if button is selected_themes_button:
+        return
+
+    if selected_themes_button:
+        set_theme_button_selected(selected_themes_button, False)
+        old_name = selected_themes_button.text.strip(" •").lower()
+        if old_name in theme_widgets:
+            theme_widgets[old_name].visible = False
+
+    selected_themes_button = button
+    set_theme_button_selected(button, True)
+    new_name = button.text.strip(" •").lower()
+    if new_name in theme_widgets:
+        theme_widgets[new_name].visible = True
+
+def make_theme_tab_button(text, x, selected=False):
+    btn = Button(parent=themes_widget, width=Dim(0.2), height=Dim(0.07),
+                 x=Dim(x), y=Dim(0.02), text=text, font_size=24,
+                 font_name=theme['font'],
+                 bgcolor=theme['themes_button_selected_color'] if selected else theme['themes_button_color'],
+                 hover_bgcolor=theme['themes_button_selected_color'] if selected else theme['themes_button_hover_color'],
+                 pressed_bgcolor=theme['themes_button_selected_color'] if selected else theme['themes_button_pressed_color'],
+                 on_press=lambda: themes_type_button_pressed(btn))
+    return btn
+
+themes_installed_button = make_theme_tab_button("Installed", 0.05, selected=True)
+themes_store_button = make_theme_tab_button("Store", 0.3)
+selected_themes_button = themes_installed_button
+
 plugins_dir = Path("plugins")
 if plugins_dir.exists():
   for category_dir in plugins_dir.iterdir():
@@ -577,7 +967,8 @@ if plugins_dir.exists():
                         plugin_data = json.load(f)
 
                     if category in loaded_plugins:
-                        loaded_plugins[category].append([plugin_module.Plugin("config.json"), plugin_data])
+                        plugin_instance = plugin_module.Plugin("config.json")
+                        loaded_plugins[category].append([plugin_instance, plugin_data])
 
 update_everything_downloading()
 app.run()
