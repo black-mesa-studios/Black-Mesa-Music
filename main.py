@@ -10,12 +10,11 @@ GITHUB_OWNER = "black-mesa-studios"
 GITHUB_REPO = "Black-Mesa-Music-Extensions"
 ENABLED_FILE = "enabled.json"
 
-# Load Config & Setup GitHub Headers
 config_file = "config.json"
 with open(config_file, "r") as f:
   config_data = json.load(f)
 
-GITHUB_TOKEN = config_data.get("github_token", "")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN") or config_data.get("github_token", "")
 API_HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}"} if GITHUB_TOKEN else {}
 
 def load_enabled():
@@ -794,7 +793,6 @@ def make_theme_action_button(row, theme_item):
     else:
         state = "delete" if installed else "download"
         
-    # Use specific theme store colors if available, otherwise fallback
     if state == "download":
         color = theme.get("themes_store_download_color", "#90EE90")
         hover = theme.get("themes_store_download_hover_color", color)
@@ -887,7 +885,6 @@ themes_store_scrolling_frame = ScrollingFrame(parent=themes_store_widget, bgcolo
 
 theme_metadata_future = executor.submit(fetch_available_themes_metadata)
 theme_metadata_future.add_done_callback(on_themes_metadata_loaded)
-# ==========================================
 
 theme_widgets = {
     "installed": themes_installed_widget,
