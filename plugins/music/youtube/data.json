@@ -1,5 +1,5 @@
 {
     "Name": "youtube",
-    "Description": "A plugin for fetching music from YouTube using yt-dlp",
+    "Description": "A plugin for fetching music from YouTube using yt_dlp",
     "Author": "Wjanek13"
 }

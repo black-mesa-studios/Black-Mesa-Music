@@ -3,6 +3,8 @@
   "plugins": [
     "metadata/MusicBrainz",
     "music/youtube",
-    "lyrics/lrclib"
+    "lyrics/lrclib",
+    "metadata/Spotify",
+    "metadata/youtube"
   ]
 }

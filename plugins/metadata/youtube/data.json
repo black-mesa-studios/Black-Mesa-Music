@@ -1,0 +1,5 @@
+{
+    "Name": "youtube",
+    "Description": "A plugin for fetching metadata from Youtube using yt_dlp",
+    "Author": "Wjanek13"
+}
