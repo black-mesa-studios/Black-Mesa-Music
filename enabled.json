@@ -5,6 +5,9 @@
     "music/youtube",
     "lyrics/lrclib",
     "metadata/Spotify",
-    "metadata/youtube"
+    "metadata/youtube",
+    "lyrics/genius",
+    "metadata/soundcloud",
+    "music/soundcloud"
   ]
 }

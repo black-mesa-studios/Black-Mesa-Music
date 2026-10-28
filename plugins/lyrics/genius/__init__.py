@@ -1,0 +1,1 @@
+from .lg_core import Plugin

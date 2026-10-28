@@ -1,6 +1,6 @@
 import yt_dlp
 from pathlib import Path
-print(1)
+
 class Plugin:
   def __init__(self, config: Path):
     pass

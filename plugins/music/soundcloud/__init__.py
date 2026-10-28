@@ -1,0 +1,1 @@
+from .sc_core import Plugin

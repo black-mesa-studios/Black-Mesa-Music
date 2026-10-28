@@ -1,0 +1,5 @@
+{
+    "Name": "soundcloud",
+    "Description": "A plugin for fetching music from SoundCloud using yt_dlp",
+    "Author": "Wjanek13"
+}
