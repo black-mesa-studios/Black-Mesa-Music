@@ -5,14 +5,14 @@ class Plugin:
   def __init__(self, config: Path):
     pass
 
-  def fetch_metadata(self, artist: str, track: str):
+  def fetch_metadata(self, track: str):
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "extract_flat": False,
     }
 
-    search_query = f"ytsearch1:{artist} - {track}"
+    search_query = f"ytsearch1:{track}"
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
       try:

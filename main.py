@@ -17,6 +17,14 @@ with open(config_file, "r") as f:
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN") or config_data.get("github_token", "")
 API_HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}"} if GITHUB_TOKEN else {}
 
+def search(text):
+    metadata = []
+    for plugin in loaded_plugins['metadata']:
+        try:
+            metadata.append(plugin[0].fetch_metadata(text))
+        except:
+            print(f"Error fetching for plugin {plugin[1]['Name']}")
+
 def load_enabled():
   try:
     with open(ENABLED_FILE, "r") as f:
@@ -396,7 +404,7 @@ def update_everything_downloading():
 
 sidebar = Widget(parent=app, bgcolor=theme['sidebar_color'], width=Dim(0, 250), height=Dim(1, -100))
 search_image = ImageLabel(parent=app, image="./icons/search.png", width=Dim(0, 30), height=Dim(0.05), x=Dim(0, 290), y=Dim(0.02))
-search_bar = TextInput(parent=app, width=Dim(1, -600), height=Dim(0.05), x=Dim(0, 350), y=Dim(0.02), placeholder="Search...", bgcolor=theme['search_bar_color'], focused_bgcolor=theme['search_bar_focused_color'], font_name=theme['font'], font_size=20)
+search_bar = TextInput(parent=app, width=Dim(1, -600), height=Dim(0.05), x=Dim(0, 350), y=Dim(0.02), placeholder="Search...", bgcolor=theme['search_bar_color'], focused_bgcolor=theme['search_bar_focused_color'], font_name=theme['font'], font_size=20, on_submit=search)
 playing_widget = Widget(parent=app, bgcolor=theme['player_bar_color'], width=Dim(1), height=Dim(0, 100), y=Dim(1, -100))
 play_button_size = 50
 play_button = Button(parent=playing_widget, text="", width=Dim(0, play_button_size), height=Dim(0, play_button_size), x=Dim(0.5, -play_button_size//2), y=Dim(0.5, -play_button_size//2), bgcolor=theme['play_button_color'], pressed_bgcolor=theme['play_button_pressed_color'], hover_bgcolor=theme['play_button_hover_color'], on_press=toggle_playing)
